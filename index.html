@@ -537,18 +537,47 @@
       ⚡ Bulk Payment Request
       <span style="font-size:.78rem;font-weight:400;color:var(--muted);margin-left:8px">Fill amounts for multiple scopes and submit all at once</span>
     </div>
-    <div style="display:flex;gap:12px;align-items:flex-end;margin-bottom:16px;flex-wrap:wrap">
-      <div class="form-group" style="margin:0;min-width:160px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;align-items:end;margin-bottom:16px">
+      <div class="form-group" style="margin:0">
         <label>Request Date</label>
-        <input type="date" id="bulk-date" style="padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;width:100%">
+        <input type="date" id="bulk-date"
+          style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit">
       </div>
-      <div class="form-group" style="margin:0;min-width:180px">
-        <label>Filter by Project</label>
-        <select id="bulk-project-filter" onchange="renderBulkTable()" style="padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;width:100%">
+      <div class="form-group" style="margin:0">
+        <label>Project</label>
+        <select id="bulk-project-filter" onchange="onBulkProjectChange()"
+          style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit">
           <option value="">All Projects</option>
         </select>
       </div>
-      <button class="btn btn-outline btn-sm" onclick="bulkFillPercent()" style="padding:7px 14px;white-space:nowrap" title="Fill all empty amounts with remaining balance">📊 Fill All Remaining</button>
+      <div class="form-group" style="margin:0">
+        <label>Scope / Block</label>
+        <select id="bulk-scope-filter" onchange="onBulkScopeChange()"
+          style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit">
+          <option value="">All Scopes</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>Work Type</label>
+        <select id="bulk-worktype-filter" onchange="onBulkWorktypeChange()"
+          style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit">
+          <option value="">All Work Types</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin:0">
+        <label>House No</label>
+        <select id="bulk-houseno-filter" onchange="renderBulkTable()"
+          style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit">
+          <option value="">All House Nos</option>
+        </select>
+      </div>
+      <div style="display:flex;gap:8px;align-items:flex-end;padding-bottom:2px">
+        <button class="btn btn-outline btn-sm" onclick="bulkFillPercent()"
+          style="padding:7px 12px;white-space:nowrap;font-size:.78rem"
+          title="Fill all empty amounts with remaining balance">📊 Fill All</button>
+        <button class="btn btn-outline btn-sm" onclick="bulkClearFilters()"
+          style="padding:7px 12px;white-space:nowrap;font-size:.78rem">✕ Clear</button>
+      </div>
     </div>
     <div class="table-wrap">
       <table id="bulk-table">
@@ -2294,26 +2323,85 @@ function setPRMode(mode) {
   document.getElementById('btn-mode-bulk').className   = 'btn btn-sm ' + (isBulk ? 'btn-primary' : 'btn-outline');
   if (isBulk) {
     document.getElementById('bulk-date').value = new Date().toISOString().slice(0,10);
+    // Initialise all cascading filters
     populateBulkProjectFilter();
-    renderBulkTable();
+    onBulkProjectChange(); // populates scope, clears downstream, renders table
   }
 }
 
+function getBulkEntries() {
+  const eng = engineers[currentEngIndex]; if(!eng) return [];
+  return projectEntries.map((e,i)=>({...e,idx:i}))
+    .filter(e=>s(e.engineer)===s(eng.name));
+}
+
 function populateBulkProjectFilter() {
-  const eng = engineers[currentEngIndex]; if(!eng) return;
-  const projects = [...new Set(projectEntries.filter(e=>s(e.engineer)===s(eng.name)).map(e=>e.project))].sort();
+  const entries = getBulkEntries();
+  const projects = [...new Set(entries.map(e=>e.project))].sort();
   const sel = document.getElementById('bulk-project-filter');
+  const cur = sel.value;
   sel.innerHTML = '<option value="">All Projects</option>' +
     projects.map(p=>`<option value="${p}">${p}</option>`).join('');
+  if(projects.includes(cur)) sel.value = cur;
+}
+
+function onBulkProjectChange() {
+  // Reset downstream filters
+  document.getElementById('bulk-scope-filter').innerHTML   = '<option value="">All Scopes</option>';
+  document.getElementById('bulk-worktype-filter').innerHTML= '<option value="">All Work Types</option>';
+  document.getElementById('bulk-houseno-filter').innerHTML = '<option value="">All House Nos</option>';
+  // Populate scope based on project
+  const proj = document.getElementById('bulk-project-filter').value;
+  const entries = getBulkEntries().filter(e=>!proj||s(e.project)===s(proj));
+  const scopes = [...new Set(entries.map(e=>e.scope))].sort();
+  document.getElementById('bulk-scope-filter').innerHTML = '<option value="">All Scopes</option>' +
+    scopes.map(v=>`<option value="${v}">${v}</option>`).join('');
+  renderBulkTable();
+}
+
+function onBulkScopeChange() {
+  document.getElementById('bulk-worktype-filter').innerHTML= '<option value="">All Work Types</option>';
+  document.getElementById('bulk-houseno-filter').innerHTML = '<option value="">All House Nos</option>';
+  const proj  = document.getElementById('bulk-project-filter').value;
+  const scope = document.getElementById('bulk-scope-filter').value;
+  const entries = getBulkEntries()
+    .filter(e=>(!proj||s(e.project)===s(proj)) && (!scope||s(e.scope)===s(scope)));
+  const worktypes = [...new Set(entries.map(e=>e.worktype))].sort();
+  document.getElementById('bulk-worktype-filter').innerHTML = '<option value="">All Work Types</option>' +
+    worktypes.map(v=>`<option value="${v}">${v}</option>`).join('');
+  renderBulkTable();
+}
+
+function onBulkWorktypeChange() {
+  document.getElementById('bulk-houseno-filter').innerHTML = '<option value="">All House Nos</option>';
+  const proj    = document.getElementById('bulk-project-filter').value;
+  const scope   = document.getElementById('bulk-scope-filter').value;
+  const wt      = document.getElementById('bulk-worktype-filter').value;
+  const entries = getBulkEntries()
+    .filter(e=>(!proj||s(e.project)===s(proj))&&(!scope||s(e.scope)===s(scope))&&(!wt||s(e.worktype)===s(wt)));
+  const housenums = [...new Set(entries.map(e=>e.houseno||''))].filter(Boolean).sort();
+  document.getElementById('bulk-houseno-filter').innerHTML = '<option value="">All House Nos</option>' +
+    housenums.map(v=>`<option value="${v}">${v}</option>`).join('');
+  renderBulkTable();
+}
+
+function bulkClearFilters() {
+  ['bulk-project-filter','bulk-scope-filter','bulk-worktype-filter','bulk-houseno-filter']
+    .forEach(id=>{ const el=document.getElementById(id); if(el) el.selectedIndex=0; });
+  populateBulkProjectFilter();
+  renderBulkTable();
 }
 
 function renderBulkTable() {
   const eng = engineers[currentEngIndex]; if(!eng) return;
-  const filterProject = document.getElementById('bulk-project-filter')?.value||'';
+  const proj = s(document.getElementById('bulk-project-filter')?.value||'');
+  const scope= s(document.getElementById('bulk-scope-filter')?.value||'');
+  const wt   = s(document.getElementById('bulk-worktype-filter')?.value||'');
+  const hn   = s(document.getElementById('bulk-houseno-filter')?.value||'');
   const claimedAll = getClaimedMapAll();
-  let entries = projectEntries.map((e,i)=>({...e,idx:i}))
-    .filter(e=>s(e.engineer)===s(eng.name));
-  if(filterProject) entries=entries.filter(e=>s(e.project)===s(filterProject));
+  let entries = getBulkEntries()
+    .filter(e=>(!proj||s(e.project)===proj)&&(!scope||s(e.scope)===scope)
+                &&(!wt||s(e.worktype)===wt)&&(!hn||s(e.houseno||'')===hn));
   const tbody = document.getElementById('bulk-table-body');
   if(!entries.length){
     tbody.innerHTML='<tr><td colspan="12"><div class="empty"><div class="empty-icon">📋</div>No assigned scopes.</div></td></tr>';
