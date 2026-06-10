@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HE Aluminum</title>
+<title>Labor Payment Request System</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{
@@ -240,7 +240,7 @@
 <div id="login-screen">
   <div class="login-box">
     <div class="login-logo">Labor<span>Pay</span> System</div>
-    <div class="login-sub">HE Aluminum</div>
+    <div class="login-sub">Labor Payment Request Management</div>
     <div class="setup-note" id="setup-note" style="display:none">
       <strong>⚙️ Setup Required</strong>
       Open this file in a text editor and replace:<br>
@@ -522,8 +522,64 @@
 <!-- ════════════ PAGE 5: PAYMENT REQUEST ════════════ -->
 <div class="page" id="page-payment">
   <div class="breadcrumb"><a onclick="showPage('requester')">← Requester</a> / <span id="payment-eng-name-breadcrumb">Payment Request</span></div>
-  <div class="page-header"><h1 id="payment-page-title">Payment Request</h1><p>Select project → scope → work type → house no. Contract details auto-fill from Project Master.</p></div>
-  <div class="card">
+  <div class="page-header">
+    <h1 id="payment-page-title">Payment Request</h1>
+    <p>Select project → scope → work type → house no, or use <strong>Bulk Request</strong> to submit multiple at once.</p>
+    <div style="display:flex;gap:10px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn btn-primary btn-sm" id="btn-mode-single" onclick="setPRMode('single')" style="padding:7px 16px">📝 Single Request</button>
+      <button class="btn btn-outline btn-sm" id="btn-mode-bulk"   onclick="setPRMode('bulk')"   style="padding:7px 16px">⚡ Bulk Request</button>
+    </div>
+  </div>
+
+  <!-- BULK REQUEST CARD -->
+  <div class="card" id="bulk-request-card" style="display:none">
+    <div class="card-title">
+      ⚡ Bulk Payment Request
+      <span style="font-size:.78rem;font-weight:400;color:var(--muted);margin-left:8px">Fill amounts for multiple scopes and submit all at once</span>
+    </div>
+    <div style="display:flex;gap:12px;align-items:flex-end;margin-bottom:16px;flex-wrap:wrap">
+      <div class="form-group" style="margin:0;min-width:160px">
+        <label>Request Date</label>
+        <input type="date" id="bulk-date" style="padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;width:100%">
+      </div>
+      <div class="form-group" style="margin:0;min-width:180px">
+        <label>Filter by Project</label>
+        <select id="bulk-project-filter" onchange="renderBulkTable()" style="padding:8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;width:100%">
+          <option value="">All Projects</option>
+        </select>
+      </div>
+      <button class="btn btn-outline btn-sm" onclick="bulkFillPercent()" style="padding:7px 14px;white-space:nowrap" title="Fill all empty amounts with remaining balance">📊 Fill All Remaining</button>
+    </div>
+    <div class="table-wrap">
+      <table id="bulk-table">
+        <thead><tr>
+          <th style="width:36px"><input type="checkbox" id="bulk-check-all" onchange="bulkToggleAll(this)" title="Select all"></th>
+          <th>Project</th><th>Scope/Block</th><th>Work Type</th><th>House No</th><th>Worker</th>
+          <th>Contract (USD)</th><th>Claimed (USD)</th><th>Remaining (USD)</th>
+          <th style="background:#c8922a;color:#fff;min-width:130px">Request Amt (USD)</th>
+          <th>Retention</th><th class="th-paid">Net Pay</th>
+        </tr></thead>
+        <tbody id="bulk-table-body"></tbody>
+      </table>
+    </div>
+    <div id="bulk-summary" style="display:flex;gap:16px;flex-wrap:wrap;margin:14px 0;font-size:.83rem">
+      <span>Selected: <strong id="bulk-selected-count">0</strong></span>
+      <span>Total Request: <strong id="bulk-total-request" class="color-orange">$ 0.00</strong></span>
+      <span>Total Net Pay: <strong id="bulk-total-net" class="color-green">$ 0.00</strong></span>
+    </div>
+    <div class="form-actions">
+      <button class="btn btn-primary" id="btn-bulk-submit" onclick="submitBulkRequests()">⚡ Submit Selected Requests</button>
+      <button class="btn btn-outline" onclick="renderBulkTable()">↻ Reset</button>
+    </div>
+    <div id="bulk-progress" style="display:none;margin-top:12px">
+      <div style="background:var(--border);border-radius:4px;height:8px;overflow:hidden">
+        <div id="bulk-progress-bar" style="height:100%;background:var(--accent3);width:0%;transition:width .3s"></div>
+      </div>
+      <div id="bulk-progress-text" style="font-size:.78rem;color:var(--muted);margin-top:6px"></div>
+    </div>
+  </div>
+
+  <div class="card" id="single-request-card">
     <div class="card-title">📝 New Payment Request</div>
     <div class="form-grid">
       <div class="form-group"><label>Request Date</label><input type="date" id="pr-date"></div>
@@ -556,7 +612,7 @@
       <button class="btn btn-accent" id="btn-submit-pr" onclick="submitPaymentRequest()">Submit Request</button>
       <button class="btn btn-outline" onclick="clearPRForm()">Clear</button>
     </div>
-    <!-- PHOTO UPLOAD -->
+    <!-- PHOTO UPLOAD — only in single mode -->
     <div class="photo-upload-area">
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px;">
         <span class="photo-upload-label">📷 Site Photos</span>
@@ -574,7 +630,7 @@
       </div>
       <div id="pr-upload-status" style="font-size:.78rem;color:var(--muted);margin-top:4px;"></div>
     </div>
-  </div>
+  </div><!-- end single-request-card -->
   <div class="amount-grid">
     <div class="amount-mini"><div class="alabel">Contract Amount</div><div class="avalue" id="sum-contract">$ 0.00</div></div>
     <div class="amount-mini orange"><div class="alabel">Total Claimed</div><div class="avalue" id="sum-claimed">$ 0.00</div></div>
@@ -2224,6 +2280,182 @@ function updatePaymentSummary(){
   remEl.textContent=`$ ${fmt(rem)}`;remEl.style.color=rem>=0?'var(--accent3)':'var(--danger)';
   document.getElementById('sum-this-retention').textContent=`$ ${fmt(thisRetention)}`;
   document.getElementById('sum-this-pay').textContent=`$ ${fmt(thisPay)}`;
+}
+
+// ══════════════════════════════════════════════════════
+//  BULK REQUEST MODE
+// ══════════════════════════════════════════════════════
+
+function setPRMode(mode) {
+  const isBulk = mode === 'bulk';
+  document.getElementById('bulk-request-card').style.display   = isBulk ? '' : 'none';
+  document.getElementById('single-request-card').style.display = isBulk ? 'none' : '';
+  document.getElementById('btn-mode-single').className = 'btn btn-sm ' + (isBulk ? 'btn-outline' : 'btn-primary');
+  document.getElementById('btn-mode-bulk').className   = 'btn btn-sm ' + (isBulk ? 'btn-primary' : 'btn-outline');
+  if (isBulk) {
+    document.getElementById('bulk-date').value = new Date().toISOString().slice(0,10);
+    populateBulkProjectFilter();
+    renderBulkTable();
+  }
+}
+
+function populateBulkProjectFilter() {
+  const eng = engineers[currentEngIndex]; if(!eng) return;
+  const projects = [...new Set(projectEntries.filter(e=>s(e.engineer)===s(eng.name)).map(e=>e.project))].sort();
+  const sel = document.getElementById('bulk-project-filter');
+  sel.innerHTML = '<option value="">All Projects</option>' +
+    projects.map(p=>`<option value="${p}">${p}</option>`).join('');
+}
+
+function renderBulkTable() {
+  const eng = engineers[currentEngIndex]; if(!eng) return;
+  const filterProject = document.getElementById('bulk-project-filter')?.value||'';
+  const claimedAll = getClaimedMapAll();
+  let entries = projectEntries.map((e,i)=>({...e,idx:i}))
+    .filter(e=>s(e.engineer)===s(eng.name));
+  if(filterProject) entries=entries.filter(e=>s(e.project)===s(filterProject));
+  const tbody = document.getElementById('bulk-table-body');
+  if(!entries.length){
+    tbody.innerHTML='<tr><td colspan="12"><div class="empty"><div class="empty-icon">📋</div>No assigned scopes.</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML=entries.map((e,i)=>{
+    const eKey   = projectKey(e);
+    const claimed= claimedAll[eKey]||0;
+    const remain = parseFloat((e.contract-claimed).toFixed(2));
+    const retPct = parseFloat(e.retention)||0;
+    const preAmt = remain>0 ? remain.toFixed(2) : '';
+    return `<tr id="bulk-row-${i}" data-idx="${e.idx}">
+      <td><input type="checkbox" class="bulk-chk" data-row="${i}"
+          onchange="bulkUpdateSummary()" ${preAmt?'checked':''}></td>
+      <td class="fw-600">${e.project}</td><td>${e.scope}</td>
+      <td>${e.worktype}</td><td>${e.houseno||'—'}</td><td>${e.worker||'—'}</td>
+      <td>$ ${fmt(e.contract)}</td>
+      <td class="color-orange">$ ${fmt(claimed)}</td>
+      <td class="${remain>0?'color-green':'color-red'} fw-600">$ ${fmt(remain)}</td>
+      <td>
+        <input type="number" min="0" step="0.01" id="bulk-amt-${i}"
+          value="${preAmt}" placeholder="0.00"
+          data-contract="${e.contract}" data-retain-pct="${retPct}" data-remain="${remain}"
+          style="width:110px;padding:6px 8px;border:1px solid var(--border);border-radius:5px;font-family:inherit;font-size:.83rem"
+          oninput="bulkCalcRow(${i});bulkUpdateSummary()">
+      </td>
+      <td id="bulk-ret-${i}" class="color-purple fw-600">$ 0.00</td>
+      <td id="bulk-net-${i}" class="color-green fw-600">$ 0.00</td>
+    </tr>`;
+  }).join('');
+  entries.forEach((_,i)=>bulkCalcRow(i));
+  bulkUpdateSummary();
+  document.getElementById('bulk-check-all').checked=true;
+}
+
+function bulkCalcRow(i){
+  const inp=document.getElementById('bulk-amt-'+i); if(!inp) return;
+  const amt=parseFloat(inp.value)||0;
+  const retPct=parseFloat(inp.dataset.retainPct)||0;
+  const ret=parseFloat((amt*retPct/100).toFixed(2));
+  const net=parseFloat((amt-ret).toFixed(2));
+  const re=document.getElementById('bulk-ret-'+i);
+  const ne=document.getElementById('bulk-net-'+i);
+  if(re) re.textContent=`$ ${fmt(ret)}`;
+  if(ne){ne.textContent=`$ ${fmt(net)}`;ne.style.color=net>=0?'var(--accent3)':'var(--danger)';}
+}
+
+function bulkUpdateSummary(){
+  let sel=0,amt=0,net=0;
+  document.querySelectorAll('.bulk-chk').forEach(chk=>{
+    if(!chk.checked) return;
+    const i=chk.dataset.row;
+    const a=parseFloat(document.getElementById('bulk-amt-'+i)?.value)||0;
+    const rp=parseFloat(document.getElementById('bulk-amt-'+i)?.dataset.retainPct)||0;
+    sel++; amt+=a; net+=a-parseFloat((a*rp/100).toFixed(2));
+  });
+  document.getElementById('bulk-selected-count').textContent=sel;
+  document.getElementById('bulk-total-request').textContent=`$ ${fmt(amt)}`;
+  document.getElementById('bulk-total-net').textContent=`$ ${fmt(net)}`;
+}
+
+function bulkToggleAll(cb){
+  document.querySelectorAll('.bulk-chk').forEach(c=>c.checked=cb.checked);
+  bulkUpdateSummary();
+}
+
+function bulkFillPercent(){
+  document.querySelectorAll('[id^="bulk-amt-"]').forEach(inp=>{
+    const remain=parseFloat(inp.dataset.remain)||0;
+    if(remain>0){
+      inp.value=remain.toFixed(2);
+      const i=inp.id.replace('bulk-amt-','');
+      bulkCalcRow(parseInt(i));
+      const chk=document.querySelector(`.bulk-chk[data-row="${i}"]`);
+      if(chk) chk.checked=true;
+    }
+  });
+  bulkUpdateSummary();
+}
+
+async function submitBulkRequests(){
+  const eng=engineers[currentEngIndex]; if(!eng) return;
+  const date=document.getElementById('bulk-date').value;
+  if(!date){showToast('Select a date first','error');return;}
+  const toSubmit=[];
+  document.querySelectorAll('.bulk-chk').forEach(chk=>{
+    if(!chk.checked) return;
+    const i=chk.dataset.row;
+    const amtInp=document.getElementById('bulk-amt-'+i); if(!amtInp) return;
+    const amt=parseFloat(amtInp.value)||0; if(amt<=0) return;
+    const rowIdx=parseInt(document.getElementById('bulk-row-'+i).dataset.idx);
+    const entry=projectEntries[rowIdx]; if(!entry) return;
+    const retPct=parseFloat(entry.retention)||0;
+    const ret=parseFloat((amt*retPct/100).toFixed(2));
+    const atp=parseFloat((amt-ret).toFixed(2));
+    toSubmit.push({entry,rowIdx,amt,ret,retPct,atp,date});
+  });
+  if(!toSubmit.length){showToast('No rows selected with amount > 0','error');return;}
+  if(!confirm(`Submit ${toSubmit.length} request(s)?
+Total: $ ${fmt(toSubmit.reduce((t,r)=>t+r.amt,0))}`)) return;
+  const btn=document.getElementById('btn-bulk-submit');
+  btn.disabled=true;
+  document.getElementById('bulk-progress').style.display='';
+  let done=0;
+  for(const item of toSubmit){
+    document.getElementById('bulk-progress-text').textContent=
+      `Submitting ${done+1}/${toSubmit.length}: ${item.entry.scope}/${item.entry.houseno||''}…`;
+    document.getElementById('bulk-progress-bar').style.width=`${Math.round(done/toSubmit.length*100)}%`;
+    try{
+      const res=await api({action:'addPayment',data:{
+        engineerName:eng.name,date:item.date,
+        project:item.entry.project,scope:item.entry.scope,
+        worktype:item.entry.worktype,houseno:item.entry.houseno||'',
+        worker:item.entry.worker||'',contract:item.entry.contract,
+        amount:item.amt,retentionPct:item.retPct,retention:item.ret,
+        amtToPay:item.atp,materialCut:0,netPay:item.atp,
+        entryIndex:item.rowIdx,status:'review',photoUrls:''
+      }});
+      if(!res.ok) throw new Error(res.error||'Failed');
+      if(!paymentRequests[currentEngIndex]) paymentRequests[currentEngIndex]=[];
+      paymentRequests[currentEngIndex].push({
+        engineerName:eng.name,date:item.date,
+        project:item.entry.project,scope:item.entry.scope,
+        worktype:item.entry.worktype,houseno:item.entry.houseno||'',
+        worker:item.entry.worker||'',contract:item.entry.contract,
+        amount:item.amt,retentionPct:item.retPct,retention:item.ret,
+        amtToPay:item.atp,materialCut:0,netPay:item.atp,
+        entryIndex:item.rowIdx,status:'review',
+        rowId:res.rowId||('bulk-'+Date.now()),photos:[]
+      });
+      done++;
+    }catch(e){
+      showToast(`Row ${done+1} failed: ${e.message}`,'error');
+    }
+  }
+  document.getElementById('bulk-progress-bar').style.width='100%';
+  document.getElementById('bulk-progress-text').textContent=`✅ Done: ${done}/${toSubmit.length} submitted`;
+  invalidateMaps();
+  renderPRTable();renderPMTable();renderLMTable();
+  btn.disabled=false;
+  showToast(`✅ ${done} request(s) submitted!`,'success');
+  setTimeout(()=>{document.getElementById('bulk-progress').style.display='none';renderBulkTable();},2500);
 }
 
 async function submitPaymentRequest(){
