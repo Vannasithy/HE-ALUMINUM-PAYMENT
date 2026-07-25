@@ -503,7 +503,10 @@
     <div class="card-title">
       💰 Retention Claims
       <span id="ret-claim-count" style="font-size:.78rem;font-weight:400;color:var(--muted);margin-left:8px;"></span>
-      <button class="btn btn-green btn-sm" style="margin-left:auto" onclick="createRetentionAP()">📑 Create AP from Approved Retention</button>
+      <div style="margin-left:auto;display:flex;gap:8px;">
+        <button class="btn btn-green btn-sm" onclick="createRetentionAP()">📑 Create AP from Approved Retention</button>
+        <button class="btn btn-green btn-sm" onclick="downloadRetentionCSV()">⬇️ Download Excel</button>
+      </div>
     </div>
     <div class="table-wrap"><table>
       <thead><tr>
@@ -955,7 +958,7 @@
 // ══════════════════════════════════════════════════════
 //  ⚠️  PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL HERE
 // ══════════════════════════════════════════════════════
-const API_URL = 'https://script.google.com/macros/s/AKfycbw90R1JltPhiKFmuNqImStcOfVA_IlyB-QVWsOpbjofXi7QdVTchkmluCYCBerK_XQNKA/exec';
+const API_URL = 'https://script.google.com/macros/s/AKfycbwpamB_814QT62mL_7KnlQsuKKusiJ7gSK8uLueStr8ZhbjDeR584np7bovnTgdt0Xb/exec';
 
 // ══════════════════════════════════════════════════════
 //  STATE
@@ -1395,34 +1398,42 @@ function buildClaimedMap(statusFilter){
       // No filter (all claimed) — EXCLUDE rejected so it returns to contract balance
       if(r.status==='rejected') return;
     }
-    const k=[s(r.project),s(r.scope),s(r.worktype),s(r.houseno),s(r.worker)].join('|');
-    if(!k||k==='||||') return;
-    map[k]=(map[k]||0)+(parseFloat(r.amount)||0);
+    const kW =[s(r.project),s(r.scope),s(r.worktype),s(r.houseno),s(r.worker)].join('|');
+    const kNW=[s(r.project),s(r.scope),s(r.worktype),s(r.houseno)].join('|');
+    if(kNW==='|||') return;
+    const amt=parseFloat(r.amount)||0;
+    map[kW] =(map[kW] ||0)+amt;
+    map[kNW]=(map[kNW]||0)+amt;
   }));
   return map;
 }
 function buildRetentionMap(){
   const map={};
-  // Step 1: Add up all retention from approved/paid payment records
+  // Step 1: Accumulate retention from approved/paid payment records
+  // Index by BOTH worker-keyed and no-worker key to handle encoding mismatches
   Object.values(paymentRequests).forEach(reqs=>(reqs||[]).forEach(r=>{
-    if(r.status!=='approved'&&r.status!=='paid') return;
-    const k=[s(r.project),s(r.scope),s(r.worktype),s(r.houseno),s(r.worker)].join('|');
-    if(!k||k==='||||') return;
+    // Include review, approved and paid — retention is held from submission
+    if(r.status==='rejected') return;
+    const kW  = [s(r.project),s(r.scope),s(r.worktype),s(r.houseno),s(r.worker)].join('|');
+    const kNW = [s(r.project),s(r.scope),s(r.worktype),s(r.houseno)].join('|');
+    if(kNW==='|||') return; // all blank — skip
     const amt     = parseFloat(r.amount)||0;
     const retPct  = parseFloat(r.retentionPct)||0;
     const ret     = parseFloat(r.retention)||0;
     const calcRet = parseFloat((amt*retPct/100).toFixed(2));
     const truRet  = (ret>amt||ret<0) ? calcRet : ret;
-    map[k]=(map[k]||0)+truRet;
+    // Store under both keys — lookup uses whichever matches
+    map[kW]  = (map[kW] ||0) + truRet;
+    map[kNW] = (map[kNW]||0) + truRet;
   }));
-  // Step 2: Subtract retention that has already been claimed and approved/paid
-  // (approved or paid retention claim = money has been or will be disbursed)
+  // Step 2: Subtract claimed/paid retention claims
   Object.values(retentionClaims).forEach(claims=>(claims||[]).forEach(c=>{
     if(c.status!=='approved'&&c.status!=='paid') return;
-    const k=[s(c.project),s(c.scope),s(c.worktype),s(c.houseno||''),s(c.worker||'')].join('|');
-    if(!k||k==='||||') return;
+    const kW  = [s(c.project),s(c.scope),s(c.worktype),s(c.houseno||''),s(c.worker||'')].join('|');
+    const kNW = [s(c.project),s(c.scope),s(c.worktype),s(c.houseno||'')].join('|');
     const claimed = parseFloat(c.retentionAmt)||0;
-    map[k] = Math.max(0, (map[k]||0) - claimed);
+    if(map[kW]  !== undefined) map[kW]  = Math.max(0, map[kW]  - claimed);
+    if(map[kNW] !== undefined) map[kNW] = Math.max(0, map[kNW] - claimed);
   }));
   return map;
 }
@@ -1731,10 +1742,16 @@ function renderPMTable(){
 
   tbody.innerHTML=visible.map(({e,i})=>{
     rowNum++;
-    // Use natural key for all calculations — immune to entryIndex issues
-    const eKey          = projectKey(e);
-    const totalClaimed  = getClaimedMapAll()[eKey]   || 0;
-    const retentionSum  = getRetentionMap()[eKey]    || 0;
+    // Use natural key — try with worker first, fall back to without worker
+    // (handles encoding mismatches in imported data where worker names differ slightly)
+    const eKey         = projectKey(e);
+    const eKeyNoWorker = [s(e.project),s(e.scope),s(e.worktype),s(e.houseno)].join('|');
+    const claimedAll   = getClaimedMapAll();
+    const retMap       = getRetentionMap();
+    const totalClaimed = claimedAll[eKey] !== undefined ? claimedAll[eKey]
+                       : (claimedAll[eKeyNoWorker] || 0);
+    const retentionSum = retMap[eKey] !== undefined ? retMap[eKey]
+                       : (retMap[eKeyNoWorker] || 0);
     const contractRemain = e.contract - totalClaimed;
     sumContract  += e.contract;
     sumPaid      += totalClaimed;
@@ -2110,10 +2127,19 @@ function renderPMRetentionClaims(){
   if (!tbody) return;
 
   // Collect all retention claims across all engineers
+  // Resolve worker from projectEntries if not stored in claim
   const rows = [];
   engineers.forEach((eng, i) => {
     (retentionClaims[i]||[]).forEach(c => {
-      rows.push({...c, engineerName: eng.name, engIdx: i});
+      // Look up worker from matching project entry if claim doesn't have it
+      let worker = c.worker || '';
+      if (!worker) {
+        const entry = projectEntries.find(e =>
+          s(e.project)===s(c.project) && s(e.scope)===s(c.scope) &&
+          s(e.worktype)===s(c.worktype) && s(e.houseno||'')===s(c.houseno||''));
+        if (entry) worker = entry.worker || '';
+      }
+      rows.push({...c, worker, engineerName: eng.name, engIdx: i});
     });
   });
 
@@ -2130,7 +2156,7 @@ function renderPMRetentionClaims(){
   }
 
   const statusLabels = {review:'🔍 Review', approved:'✅ Approved', rejected:'❌ Rejected'};
-  tbody.innerHTML = rows.map((c, idx) => `<tr class="${c.status==='review'?'':''}">
+  tbody.innerHTML = rows.map((c, idx) => `<tr>
     <td>${idx+1}</td>
     <td class="fw-600">${c.engineerName}</td>
     <td>${c.date ? String(c.date).slice(0,10) : '—'}</td>
@@ -2138,7 +2164,7 @@ function renderPMRetentionClaims(){
     <td>${c.scope}</td>
     <td>${c.worktype}</td>
     <td>${c.houseno||'—'}</td>
-    <td>${c.worker||'—'}</td>
+    <td class="fw-600">${c.worker||'—'}</td>
     <td class="color-purple fw-600">$ ${fmt(c.retentionAmt)}</td>
     <td>
       <select class="status-select ${c.status}"
@@ -2169,6 +2195,33 @@ async function updateRetentionStatusPM(engIdx, sel, rowId) {
     sel.disabled = false;
     showToast('Update failed: ' + e.message, 'error');
   }
+}
+
+function downloadRetentionCSV(){
+  // Collect all retention claims with resolved worker names
+  const rows=[['#','Engineer','Date','Project','Scope/Block','Work Type','House No','Worker','Retention Amt (USD)','Status']];
+  let n=1;
+  engineers.forEach((eng,i)=>{
+    (retentionClaims[i]||[]).forEach(c=>{
+      // Resolve worker same way as renderPMRetentionClaims
+      let worker = c.worker || '';
+      if (!worker) {
+        const entry = projectEntries.find(e=>
+          s(e.project)===s(c.project)&&s(e.scope)===s(c.scope)&&
+          s(e.worktype)===s(c.worktype)&&s(e.houseno||'')===s(c.houseno||''));
+        if (entry) worker = entry.worker||'';
+      }
+      rows.push([
+        n++, eng.name,
+        c.date ? String(c.date).slice(0,10) : '',
+        c.project, c.scope, c.worktype,
+        c.houseno||'', worker,
+        c.retentionAmt, c.status
+      ]);
+    });
+  });
+  downloadCSV(rows, 'Retention_Claims_'+new Date().toISOString().slice(0,10)+'.csv');
+  showToast('Downloaded — open with Excel (Khmer text supported)');
 }
 
 function downloadReviewExcel(){
@@ -2785,10 +2838,16 @@ async function submitRetentionClaim(entryIdx){
       retentionAmt:retentionHeld,entryIndex:entryIdx,status:'review'
     }});
     retentionClaims[currentEngIndex].push({
-      date:today,
-      project:entry.project,scope:entry.scope,worktype:entry.worktype,houseno:entry.houseno||'',
-      worker:entry.worker||'',
-      retentionAmt:retentionHeld,entryIndex:entryIdx,status:'review',rowId:res.rowId
+      date        : today,
+      project     : entry.project,
+      scope       : entry.scope,
+      worktype    : entry.worktype,
+      houseno     : entry.houseno||'',
+      worker      : entry.worker||'',   // always store worker at submit time
+      retentionAmt: retentionHeld,
+      entryIndex  : entryIdx,
+      status      : 'review',
+      rowId       : res.rowId
     });
     renderRetentionTable();renderRetentionHistory();
     renderPMRetentionClaims();
