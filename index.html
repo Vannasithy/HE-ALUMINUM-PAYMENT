@@ -1471,15 +1471,29 @@ function getDateMap()           { if(!_dateMap)             _dateMap=buildDateMa
 
 function getTotalApprovedForEntry(entryIdx){
   if(!projectEntries[entryIdx]) return 0;
-  return getClaimedMapApproved()[projectKey(projectEntries[entryIdx])]||0;
+  const e   = projectEntries[entryIdx];
+  const kW  = projectKey(e);
+  const kNW = [s(e.project),s(e.scope),s(e.worktype),s(e.houseno)].join('|');
+  const map = getClaimedMapApproved();
+  return map[kW] !== undefined ? map[kW] : (map[kNW] || 0);
 }
 function getTotalClaimedForEntry(entryIdx){
   if(!projectEntries[entryIdx]) return 0;
-  return getClaimedMapAll()[projectKey(projectEntries[entryIdx])]||0;
+  const e   = projectEntries[entryIdx];
+  const kW  = projectKey(e);  // with worker
+  const kNW = [s(e.project),s(e.scope),s(e.worktype),s(e.houseno)].join('|'); // no worker
+  const map = getClaimedMapAll();
+  // Use worker-keyed if available, otherwise no-worker key
+  // Avoid double-counting: if both exist, prefer worker-keyed (more specific)
+  return map[kW] !== undefined ? map[kW] : (map[kNW] || 0);
 }
 function getTotalRetentionForEntry(entryIdx){
   if(!projectEntries[entryIdx]) return 0;
-  return getRetentionMap()[projectKey(projectEntries[entryIdx])]||0;
+  const e   = projectEntries[entryIdx];
+  const kW  = projectKey(e);
+  const kNW = [s(e.project),s(e.scope),s(e.worktype),s(e.houseno)].join('|');
+  const map = getRetentionMap();
+  return map[kW] !== undefined ? map[kW] : (map[kNW] || 0);
 }
 function getFirstApprovedDate(entryIdx){
   if(!projectEntries[entryIdx]) return null;
